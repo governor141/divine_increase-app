@@ -1,18 +1,21 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../models/business.dart';
 import '../theme/app_theme.dart';
+import 'approved_businesses_screen.dart';
 
 /// Home dashboard.
 ///
-/// The "Featured Businesses" strip is now live — it reads directly from
-/// your `featuredBusinesses` Firestore collection (only ones that haven't
-/// expired), so anything added there through your admin/Telegram flow
-/// shows up here automatically, no app update needed.
+/// The "Featured Businesses" strip auto-slides and combines two sources:
+/// sponsored/paid ads from `featuredBusinesses` (unexpired only) and every
+/// admin-approved business from `businesses` (status == "approved"). So the
+/// moment you approve a business as admin, it shows up here automatically.
 ///
-/// The "Network" grid buttons (Directory, Wallet, Prayer, etc.) are still
-/// placeholders — those get built out in Phase 4.
+/// The "Featured Business" Quick Access card opens the full approved-
+/// businesses list. Directory and Advertise are still placeholders —
+/// those get built out in Phase 4.
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -24,6 +27,12 @@ class HomeScreen extends StatelessWidget {
     _NetworkItem('Wallet', Icons.account_balance_wallet_outlined, AppColors.navy),
     _NetworkItem('Donate', Icons.favorite_outline, AppColors.danger),
   ];
+
+  static void _comingSoon(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('This screen is coming in a future update.')),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -92,11 +101,17 @@ class HomeScreen extends StatelessWidget {
                     Text('Quick Access', style: AppTheme.heading(size: 15)),
                     const SizedBox(height: 10),
                     Row(children: [
-                      _PrimaryCard(icon: Icons.apartment_outlined, label: 'Directory'),
+                      _PrimaryCard(icon: Icons.apartment_outlined, label: 'Directory', onTap: () => _comingSoon(context)),
                       const SizedBox(width: 10),
-                      _PrimaryCard(icon: Icons.star_outline, label: 'Featured Business'),
+                      _PrimaryCard(
+                        icon: Icons.star_outline,
+                        label: 'Featured Business',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const ApprovedBusinessesScreen()),
+                        ),
+                      ),
                       const SizedBox(width: 10),
-                      _PrimaryCard(icon: Icons.campaign_outlined, label: 'Advertise'),
+                      _PrimaryCard(icon: Icons.campaign_outlined, label: 'Advertise', onTap: () => _comingSoon(context)),
                     ]),
                     const SizedBox(height: 18),
                     Text('Network', style: AppTheme.heading(size: 15)),
@@ -122,14 +137,23 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
+/// Lightweight display item shared by both data sources (sponsored ads
+/// and approved businesses) so the carousel can render either the same way.
+class _CarouselItem {
+  final String name;
+  final String category;
+  final String imageUrl;
+  final bool isAdvert;
+  const _CarouselItem({required this.name, required this.category, required this.imageUrl, required this.isAdvert});
+}
+
 class _FeaturedSection extends StatelessWidget {
   const _FeaturedSection();
 
   @override
   Widget build(BuildContext context) {
-    final query = FirebaseFirestore.instance
-        .collection('featuredBusinesses')
-        .where('expiresAt', isGreaterThan: Timestamp.now());
+    final adsQuery = FirebaseFirestore.instance.collection('featuredBusinesses').where('expiresAt', isGreaterThan: Timestamp.now());
+    final approvedQuery = FirebaseFirestore.instance.collection('businesses').where('status', isEqualTo: 'approved');
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -150,7 +174,10 @@ class _FeaturedSection extends StatelessWidget {
                   const SizedBox(width: 6),
                   Text('Featured Businesses', style: AppTheme.body(size: 12, weight: FontWeight.w600, color: AppColors.goldSoft)),
                 ]),
-                Text('See all  ›', style: AppTheme.body(size: 11, color: const Color(0xFFB9BECF))),
+                GestureDetector(
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ApprovedBusinessesScreen())),
+                  child: Text('See all  ›', style: AppTheme.body(size: 11, color: const Color(0xFFB9BECF))),
+                ),
               ],
             ),
           ),
@@ -158,35 +185,35 @@ class _FeaturedSection extends StatelessWidget {
           SizedBox(
             height: 118,
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: query.snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.goldSoft),
-                    ),
-                  );
-                }
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Text('Could not load featured businesses.', style: AppTheme.body(size: 11.5, color: const Color(0xFFB9BECF))),
-                  );
-                }
-                final docs = snapshot.data?.docs ?? [];
-                if (docs.isEmpty) {
-                  return Center(
-                    child: Text('No featured businesses right now.', style: AppTheme.body(size: 11.5, color: const Color(0xFFB9BECF))),
-                  );
-                }
-                final businesses = docs.map(FeaturedBusiness.fromFirestore).toList();
-                return ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: businesses.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 10),
-                  itemBuilder: (context, i) => _FeaturedCard(business: businesses[i]),
+              stream: adsQuery.snapshots(),
+              builder: (context, adsSnap) {
+                return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: approvedQuery.snapshots(),
+                  builder: (context, bizSnap) {
+                    if (adsSnap.connectionState == ConnectionState.waiting || bizSnap.connectionState == ConnectionState.waiting) {
+                      return const Center(
+                        child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.goldSoft)),
+                      );
+                    }
+                    if (adsSnap.hasError || bizSnap.hasError) {
+                      return Center(
+                        child: Text('Could not load featured businesses.', style: AppTheme.body(size: 11.5, color: const Color(0xFFB9BECF))),
+                      );
+                    }
+                    final ads = (adsSnap.data?.docs ?? [])
+                        .map(FeaturedBusiness.fromFirestore)
+                        .map((f) => _CarouselItem(name: f.name, category: f.category, imageUrl: f.imageUrl, isAdvert: true));
+                    final approved = (bizSnap.data?.docs ?? [])
+                        .map(Business.fromFirestore)
+                        .map((b) => _CarouselItem(name: b.businessName, category: b.businessCategory, imageUrl: b.displayImage, isAdvert: false));
+                    final items = [...ads, ...approved];
+                    if (items.isEmpty) {
+                      return Center(
+                        child: Text('No featured businesses right now.', style: AppTheme.body(size: 11.5, color: const Color(0xFFB9BECF))),
+                      );
+                    }
+                    return _AutoScrollRow(items: items);
+                  },
                 );
               },
             ),
@@ -197,9 +224,62 @@ class _FeaturedSection extends StatelessWidget {
   }
 }
 
+/// A horizontal row that auto-advances on its own, looping back to the
+/// start once it reaches the end. Still swipeable by hand at any time.
+class _AutoScrollRow extends StatefulWidget {
+  final List<_CarouselItem> items;
+  const _AutoScrollRow({required this.items});
+
+  @override
+  State<_AutoScrollRow> createState() => _AutoScrollRowState();
+}
+
+class _AutoScrollRowState extends State<_AutoScrollRow> {
+  final _controller = ScrollController();
+  Timer? _timer;
+  static const _cardStep = 158.0; // card width (148) + separator (10)
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 3), (_) => _advance());
+  }
+
+  void _advance() {
+    if (!_controller.hasClients) return;
+    final maxExtent = _controller.position.maxScrollExtent;
+    if (maxExtent <= 0) return;
+    final next = _controller.offset + _cardStep;
+    if (next >= maxExtent) {
+      _controller.animateTo(0, duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
+    } else {
+      _controller.animateTo(next, duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      controller: _controller,
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      itemCount: widget.items.length,
+      separatorBuilder: (_, __) => const SizedBox(width: 10),
+      itemBuilder: (context, i) => _FeaturedCard(item: widget.items[i]),
+    );
+  }
+}
+
 class _FeaturedCard extends StatelessWidget {
-  final FeaturedBusiness business;
-  const _FeaturedCard({required this.business});
+  final _CarouselItem item;
+  const _FeaturedCard({required this.item});
 
   @override
   Widget build(BuildContext context) {
@@ -219,18 +299,17 @@ class _FeaturedCard extends StatelessWidget {
               height: 54,
               width: double.infinity,
               child: Stack(children: [
-                if (business.imageUrl.isNotEmpty)
+                if (item.imageUrl.isNotEmpty)
                   Positioned.fill(
                     child: Image.network(
-                      business.imageUrl,
+                      item.imageUrl,
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => Container(
                         color: Colors.white.withOpacity(0.04),
                         child: const Icon(Icons.storefront_outlined, color: Colors.white54),
                       ),
-                      loadingBuilder: (context, child, progress) => progress == null
-                          ? child
-                          : Container(color: Colors.white.withOpacity(0.04)),
+                      loadingBuilder: (context, child, progress) =>
+                          progress == null ? child : Container(color: Colors.white.withOpacity(0.04)),
                     ),
                   )
                 else
@@ -238,7 +317,7 @@ class _FeaturedCard extends StatelessWidget {
                     color: Colors.white.withOpacity(0.04),
                     child: const Center(child: Icon(Icons.storefront_outlined, color: Colors.white54)),
                   ),
-                if (business.isAdvert)
+                if (item.isAdvert)
                   Positioned(
                     top: 6,
                     left: 6,
@@ -256,9 +335,9 @@ class _FeaturedCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(business.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: AppTheme.body(size: 12, weight: FontWeight.w600, color: Colors.white)),
-                Text(business.category, maxLines: 1, overflow: TextOverflow.ellipsis,
+                Text(item.category, maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: AppTheme.body(size: 10, color: const Color(0xFFB9BECF))),
               ],
             ),
@@ -308,23 +387,27 @@ class _IconBtn extends StatelessWidget {
 class _PrimaryCard extends StatelessWidget {
   final IconData icon;
   final String label;
-  const _PrimaryCard({required this.icon, required this.label});
+  final VoidCallback onTap;
+  const _PrimaryCard({required this.icon, required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          color: AppColors.cream2,
-          border: Border.all(color: AppColors.line),
-          borderRadius: BorderRadius.circular(14),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            color: AppColors.cream2,
+            border: Border.all(color: AppColors.line),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Column(children: [
+            Icon(icon, color: AppColors.navy, size: 20),
+            const SizedBox(height: 6),
+            Text(label, textAlign: TextAlign.center, style: AppTheme.body(size: 10.5, weight: FontWeight.w600)),
+          ]),
         ),
-        child: Column(children: [
-          Icon(icon, color: AppColors.navy, size: 20),
-          const SizedBox(height: 6),
-          Text(label, textAlign: TextAlign.center, style: AppTheme.body(size: 10.5, weight: FontWeight.w600)),
-        ]),
       ),
     );
   }
