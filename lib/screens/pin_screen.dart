@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../services/pin_service.dart';
 import '../theme/app_theme.dart';
@@ -64,7 +65,12 @@ class _PinScreenState extends State<PinScreen> {
     }
   }
 
-  void _goHome() {
+  Future<void> _goHome() async {
+    if (!mounted) return;
+    // Make sure the just-set display name (from sign up) is actually
+    // loaded before Home reads it — otherwise it can briefly fall back
+    // to the generic greeting.
+    await FirebaseAuth.instance.currentUser?.reload();
     if (!mounted) return;
     Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const HomeScreen()));
   }
