@@ -26,7 +26,7 @@ jobs:
           sed -i "s/FIREBASE_STORAGE_BUCKET_PLACEHOLDER/${{ secrets.FIREBASE_STORAGE_BUCKET }}/" lib/firebase_options.dart
 
       - name: Generate Android platform files
-        run: flutter create --platforms=android --org com.spiritussanctusignis .
+        run: flutter create --platforms=android --org com.spritussanctusignis .
 
       - name: Set app display name
         run: |
