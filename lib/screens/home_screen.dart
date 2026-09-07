@@ -107,7 +107,7 @@ class HomeScreen extends StatelessWidget {
                         icon: Icons.star_outline,
                         label: 'Featured Business',
                         onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const ApprovedBusinessesScreen()),
+                          MaterialPageRoute(builder: (_) => ApprovedBusinessesScreen()),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -175,7 +175,7 @@ class _FeaturedSection extends StatelessWidget {
                   Text('Featured Businesses', style: AppTheme.body(size: 12, weight: FontWeight.w600, color: AppColors.goldSoft)),
                 ]),
                 GestureDetector(
-                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ApprovedBusinessesScreen())),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ApprovedBusinessesScreen())),
                   child: Text('See all  ›', style: AppTheme.body(size: 11, color: const Color(0xFFB9BECF))),
                 ),
               ],
