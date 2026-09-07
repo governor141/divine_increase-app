@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../models/business.dart';
@@ -5,19 +6,15 @@ import '../theme/app_theme.dart';
 
 /// Home dashboard.
 ///
-/// The featured businesses and network grid below use placeholder data.
-/// Phase 2 will replace the placeholder list with a live Firestore query
-/// so that anything you add through your admin backend shows up here
-/// automatically — no app update needed.
+/// The "Featured Businesses" strip is now live — it reads directly from
+/// your `featuredBusinesses` Firestore collection (only ones that haven't
+/// expired), so anything added there through your admin/Telegram flow
+/// shows up here automatically, no app update needed.
+///
+/// The "Network" grid buttons (Directory, Wallet, Prayer, etc.) are still
+/// placeholders — those get built out in Phase 4.
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
-
-  static const _placeholderBusinesses = [
-    Business(name: 'Amara Catering', category: 'Catering', location: 'Lagos', sponsored: true),
-    Business(name: 'Grace Couture', category: 'Fashion & Clothing', location: 'Enugu'),
-    Business(name: 'Xero Software Inc.', category: 'Software Dev.', location: 'Enugu', sponsored: true),
-    Business(name: 'Titus Builders', category: 'Construction', location: 'Accra'),
-  ];
 
   static const _networkItems = [
     _NetworkItem('Prayer', Icons.self_improvement, AppColors.sage),
@@ -69,7 +66,7 @@ class HomeScreen extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    _FeaturedSection(businesses: _placeholderBusinesses),
+                    const _FeaturedSection(),
                     const SizedBox(height: 14),
                     Container(
                       padding: const EdgeInsets.all(16),
@@ -126,11 +123,14 @@ class HomeScreen extends StatelessWidget {
 }
 
 class _FeaturedSection extends StatelessWidget {
-  final List<Business> businesses;
-  const _FeaturedSection({required this.businesses});
+  const _FeaturedSection();
 
   @override
   Widget build(BuildContext context) {
+    final query = FirebaseFirestore.instance
+        .collection('featuredBusinesses')
+        .where('expiresAt', isGreaterThan: Timestamp.now());
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16),
       decoration: BoxDecoration(
@@ -157,58 +157,110 @@ class _FeaturedSection extends StatelessWidget {
           const SizedBox(height: 12),
           SizedBox(
             height: 118,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: businesses.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 10),
-              itemBuilder: (context, i) {
-                final b = businesses[i];
-                return Container(
-                  width: 148,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.06),
-                    border: Border.all(color: Colors.white.withOpacity(0.12)),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        height: 54,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.04),
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
-                        ),
-                        alignment: Alignment.center,
-                        child: Stack(children: [
-                          const Center(child: Icon(Icons.storefront_outlined, color: Colors.white54)),
-                          if (b.sponsored)
-                            Positioned(
-                              top: 6,
-                              left: 6,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(color: AppColors.gold, borderRadius: BorderRadius.circular(6)),
-                                child: Text('Sponsored', style: AppTheme.body(size: 8, weight: FontWeight.w700, color: AppColors.navy)),
-                              ),
-                            ),
-                        ]),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(b.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTheme.body(size: 12, weight: FontWeight.w600, color: Colors.white)),
-                            Text(b.category, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTheme.body(size: 10, color: const Color(0xFFB9BECF))),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: query.snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.goldSoft),
+                    ),
+                  );
+                }
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text('Could not load featured businesses.', style: AppTheme.body(size: 11.5, color: const Color(0xFFB9BECF))),
+                  );
+                }
+                final docs = snapshot.data?.docs ?? [];
+                if (docs.isEmpty) {
+                  return Center(
+                    child: Text('No featured businesses right now.', style: AppTheme.body(size: 11.5, color: const Color(0xFFB9BECF))),
+                  );
+                }
+                final businesses = docs.map(FeaturedBusiness.fromFirestore).toList();
+                return ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: businesses.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 10),
+                  itemBuilder: (context, i) => _FeaturedCard(business: businesses[i]),
                 );
               },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FeaturedCard extends StatelessWidget {
+  final FeaturedBusiness business;
+  const _FeaturedCard({required this.business});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 148,
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.06),
+        border: Border.all(color: Colors.white.withOpacity(0.12)),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+            child: SizedBox(
+              height: 54,
+              width: double.infinity,
+              child: Stack(children: [
+                if (business.imageUrl.isNotEmpty)
+                  Positioned.fill(
+                    child: Image.network(
+                      business.imageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        color: Colors.white.withOpacity(0.04),
+                        child: const Icon(Icons.storefront_outlined, color: Colors.white54),
+                      ),
+                      loadingBuilder: (context, child, progress) => progress == null
+                          ? child
+                          : Container(color: Colors.white.withOpacity(0.04)),
+                    ),
+                  )
+                else
+                  Container(
+                    color: Colors.white.withOpacity(0.04),
+                    child: const Center(child: Icon(Icons.storefront_outlined, color: Colors.white54)),
+                  ),
+                if (business.isAdvert)
+                  Positioned(
+                    top: 6,
+                    left: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(color: AppColors.gold, borderRadius: BorderRadius.circular(6)),
+                      child: Text('Sponsored', style: AppTheme.body(size: 8, weight: FontWeight.w700, color: AppColors.navy)),
+                    ),
+                  ),
+              ]),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(business.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: AppTheme.body(size: 12, weight: FontWeight.w600, color: Colors.white)),
+                Text(business.category, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: AppTheme.body(size: 10, color: const Color(0xFFB9BECF))),
+              ],
             ),
           ),
         ],
