@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import 'auth_screen.dart';
+import 'pin_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -31,9 +33,18 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
   void _goNext() {
     if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const AuthScreen()),
-    );
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      // Already signed in from last time — just ask for the PIN instead
+      // of making them sign in with email/password all over again.
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => PinScreen(mode: PinMode.unlock, email: user.email ?? '')),
+      );
+    } else {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const AuthScreen()),
+      );
+    }
   }
 
   @override
