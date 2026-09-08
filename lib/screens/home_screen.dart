@@ -6,6 +6,7 @@ import '../models/business.dart';
 import '../theme/app_theme.dart';
 import 'testimony_screen.dart';
 import 'community_chat_screen.dart';
+import 'events_screen.dart';
 
 /// Home dashboard.
 ///
@@ -43,6 +44,8 @@ class HomeScreen extends StatelessWidget {
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TestimonyScreen()));
     } else if (label == 'Community') {
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CommunityChatScreen()));
+    } else if (label == 'Events') {
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EventsScreen()));
     } else {
       _comingSoon(context);
     }
