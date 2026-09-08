@@ -4,6 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../models/business.dart';
 import '../theme/app_theme.dart';
+import 'testimony_screen.dart';
+import 'community_chat_screen.dart';
 
 /// Home dashboard.
 ///
@@ -34,6 +36,16 @@ class HomeScreen extends StatelessWidget {
 
   static void _openFeatured(BuildContext context) {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FeaturedBusinessesScreen()));
+  }
+
+  static void _handleNetworkTap(BuildContext context, String label) {
+    if (label == 'Testimony') {
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TestimonyScreen()));
+    } else if (label == 'Community') {
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CommunityChatScreen()));
+    } else {
+      _comingSoon(context);
+    }
   }
 
   @override
@@ -119,7 +131,9 @@ class HomeScreen extends StatelessWidget {
                       mainAxisSpacing: 10,
                       crossAxisSpacing: 10,
                       childAspectRatio: 1.1,
-                      children: _networkItems.map((item) => _NetworkTile(item: item)).toList(),
+                      children: _networkItems
+                          .map((item) => _NetworkTile(item: item, onTap: () => _handleNetworkTap(context, item.label)))
+                          .toList(),
                     ),
                   ],
                 ),
@@ -555,21 +569,25 @@ class _NetworkItem {
 
 class _NetworkTile extends StatelessWidget {
   final _NetworkItem item;
-  const _NetworkTile({required this.item});
+  final VoidCallback onTap;
+  const _NetworkTile({required this.item, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.cream2,
-        border: Border.all(color: AppColors.line),
-        borderRadius: BorderRadius.circular(14),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.cream2,
+          border: Border.all(color: AppColors.line),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(item.icon, color: item.color, size: 22),
+          const SizedBox(height: 6),
+          Text(item.label, style: AppTheme.body(size: 11, weight: FontWeight.w600)),
+        ]),
       ),
-      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Icon(item.icon, color: item.color, size: 22),
-        const SizedBox(height: 6),
-        Text(item.label, style: AppTheme.body(size: 11, weight: FontWeight.w600)),
-      ]),
     );
   }
 }
@@ -595,11 +613,20 @@ class _BottomNav extends StatelessWidget {
         children: items.map((it) {
           final (icon, label, active) = it;
           final color = active ? AppColors.navy : AppColors.muted;
-          return Column(mainAxisSize: MainAxisSize.min, children: [
-            Icon(icon, size: 20, color: color),
-            const SizedBox(height: 2),
-            Text(label, style: AppTheme.body(size: 10, weight: active ? FontWeight.w700 : FontWeight.w500, color: color)),
-          ]);
+          return GestureDetector(
+            onTap: () {
+              if (label == 'Chat') {
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CommunityChatScreen()));
+              } else if (!active) {
+                HomeScreen._comingSoon(context);
+              }
+            },
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Icon(icon, size: 20, color: color),
+              const SizedBox(height: 2),
+              Text(label, style: AppTheme.body(size: 10, weight: active ? FontWeight.w700 : FontWeight.w500, color: color)),
+            ]),
+          );
         }).toList(),
       ),
     );
