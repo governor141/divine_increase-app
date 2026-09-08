@@ -7,6 +7,8 @@ import '../theme/app_theme.dart';
 import 'testimony_screen.dart';
 import 'community_chat_screen.dart';
 import 'events_screen.dart';
+import 'prayer_screen.dart';
+import 'donate_screen.dart';
 
 /// Home dashboard.
 ///
@@ -46,6 +48,10 @@ class HomeScreen extends StatelessWidget {
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CommunityChatScreen()));
     } else if (label == 'Events') {
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EventsScreen()));
+    } else if (label == 'Prayer') {
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PrayerScreen()));
+    } else if (label == 'Donate') {
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DonateScreen()));
     } else {
       _comingSoon(context);
     }
@@ -620,6 +626,8 @@ class _BottomNav extends StatelessWidget {
             onTap: () {
               if (label == 'Chat') {
                 Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CommunityChatScreen()));
+              } else if (label == 'Prayer') {
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PrayerScreen()));
               } else if (!active) {
                 HomeScreen._comingSoon(context);
               }
