@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../models/business.dart';
 import '../theme/app_theme.dart';
-import 'approved_businesses_screen.dart';
 
 /// Home dashboard.
 ///
@@ -13,9 +12,8 @@ import 'approved_businesses_screen.dart';
 /// admin-approved business from `businesses` (status == "approved"). So the
 /// moment you approve a business as admin, it shows up here automatically.
 ///
-/// The "Featured Business" Quick Access card opens the full approved-
-/// businesses list. Directory and Advertise are still placeholders —
-/// those get built out in Phase 4.
+/// Tapping "Featured Business" (or "See all ›") opens FeaturedBusinessesScreen
+/// below, which lists that same combined set full-screen.
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -32,6 +30,10 @@ class HomeScreen extends StatelessWidget {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('This screen is coming in a future update.')),
     );
+  }
+
+  static void _openFeatured(BuildContext context) {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FeaturedBusinessesScreen()));
   }
 
   @override
@@ -103,13 +105,7 @@ class HomeScreen extends StatelessWidget {
                     Row(children: [
                       _PrimaryCard(icon: Icons.apartment_outlined, label: 'Directory', onTap: () => _comingSoon(context)),
                       const SizedBox(width: 10),
-                      _PrimaryCard(
-                        icon: Icons.star_outline,
-                        label: 'Featured Business',
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => ApprovedBusinessesScreen()),
-                        ),
-                      ),
+                      _PrimaryCard(icon: Icons.star_outline, label: 'Featured Business', onTap: () => _openFeatured(context)),
                       const SizedBox(width: 10),
                       _PrimaryCard(icon: Icons.campaign_outlined, label: 'Advertise', onTap: () => _comingSoon(context)),
                     ]),
@@ -137,14 +133,61 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-/// Lightweight display item shared by both data sources (sponsored ads
-/// and approved businesses) so the carousel can render either the same way.
+/// Shared display item for both data sources (sponsored ads and approved
+/// businesses), used by both the carousel and the full-screen list below.
 class _CarouselItem {
   final String name;
   final String category;
+  final String location;
   final String imageUrl;
   final bool isAdvert;
-  const _CarouselItem({required this.name, required this.category, required this.imageUrl, required this.isAdvert});
+  const _CarouselItem({
+    required this.name,
+    required this.category,
+    required this.location,
+    required this.imageUrl,
+    required this.isAdvert,
+  });
+}
+
+Stream<List<_CarouselItem>> _combinedFeaturedStream() {
+  final adsQuery = FirebaseFirestore.instance.collection('featuredBusinesses').where('expiresAt', isGreaterThan: Timestamp.now());
+  final approvedQuery = FirebaseFirestore.instance.collection('businesses').where('status', isEqualTo: 'approved');
+
+  final controller = StreamController<List<_CarouselItem>>.broadcast();
+  List<_CarouselItem> ads = [];
+  List<_CarouselItem> approved = [];
+  bool gotAds = false;
+  bool gotApproved = false;
+
+  void emit() {
+    if (gotAds && gotApproved) controller.add([...ads, ...approved]);
+  }
+
+  final sub1 = adsQuery.snapshots().listen((snap) {
+    ads = snap.docs
+        .map(FeaturedBusiness.fromFirestore)
+        .map((f) => _CarouselItem(name: f.name, category: f.category, location: f.location, imageUrl: f.imageUrl, isAdvert: true))
+        .toList();
+    gotAds = true;
+    emit();
+  }, onError: (_) => controller.addError('ads'));
+
+  final sub2 = approvedQuery.snapshots().listen((snap) {
+    approved = snap.docs
+        .map(Business.fromFirestore)
+        .map((b) => _CarouselItem(name: b.businessName, category: b.businessCategory, location: b.location, imageUrl: b.displayImage, isAdvert: false))
+        .toList();
+    gotApproved = true;
+    emit();
+  }, onError: (_) => controller.addError('approved'));
+
+  controller.onCancel = () {
+    sub1.cancel();
+    sub2.cancel();
+  };
+
+  return controller.stream;
 }
 
 class _FeaturedSection extends StatelessWidget {
@@ -152,9 +195,6 @@ class _FeaturedSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final adsQuery = FirebaseFirestore.instance.collection('featuredBusinesses').where('expiresAt', isGreaterThan: Timestamp.now());
-    final approvedQuery = FirebaseFirestore.instance.collection('businesses').where('status', isEqualTo: 'approved');
-
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16),
       decoration: BoxDecoration(
@@ -175,7 +215,7 @@ class _FeaturedSection extends StatelessWidget {
                   Text('Featured Businesses', style: AppTheme.body(size: 12, weight: FontWeight.w600, color: AppColors.goldSoft)),
                 ]),
                 GestureDetector(
-                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ApprovedBusinessesScreen())),
+                  onTap: () => HomeScreen._openFeatured(context),
                   child: Text('See all  ›', style: AppTheme.body(size: 11, color: const Color(0xFFB9BECF))),
                 ),
               ],
@@ -184,37 +224,26 @@ class _FeaturedSection extends StatelessWidget {
           const SizedBox(height: 12),
           SizedBox(
             height: 118,
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: adsQuery.snapshots(),
-              builder: (context, adsSnap) {
-                return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                  stream: approvedQuery.snapshots(),
-                  builder: (context, bizSnap) {
-                    if (adsSnap.connectionState == ConnectionState.waiting || bizSnap.connectionState == ConnectionState.waiting) {
-                      return const Center(
-                        child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.goldSoft)),
-                      );
-                    }
-                    if (adsSnap.hasError || bizSnap.hasError) {
-                      return Center(
-                        child: Text('Could not load featured businesses.', style: AppTheme.body(size: 11.5, color: const Color(0xFFB9BECF))),
-                      );
-                    }
-                    final ads = (adsSnap.data?.docs ?? [])
-                        .map(FeaturedBusiness.fromFirestore)
-                        .map((f) => _CarouselItem(name: f.name, category: f.category, imageUrl: f.imageUrl, isAdvert: true));
-                    final approved = (bizSnap.data?.docs ?? [])
-                        .map(Business.fromFirestore)
-                        .map((b) => _CarouselItem(name: b.businessName, category: b.businessCategory, imageUrl: b.displayImage, isAdvert: false));
-                    final items = [...ads, ...approved];
-                    if (items.isEmpty) {
-                      return Center(
-                        child: Text('No featured businesses right now.', style: AppTheme.body(size: 11.5, color: const Color(0xFFB9BECF))),
-                      );
-                    }
-                    return _AutoScrollRow(items: items);
-                  },
-                );
+            child: StreamBuilder<List<_CarouselItem>>(
+              stream: _combinedFeaturedStream(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.goldSoft)),
+                  );
+                }
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text('Could not load featured businesses.', style: AppTheme.body(size: 11.5, color: const Color(0xFFB9BECF))),
+                  );
+                }
+                final items = snapshot.data ?? [];
+                if (items.isEmpty) {
+                  return Center(
+                    child: Text('No featured businesses right now.', style: AppTheme.body(size: 11.5, color: const Color(0xFFB9BECF))),
+                  );
+                }
+                return _AutoScrollRow(items: items);
               },
             ),
           ),
@@ -339,6 +368,110 @@ class _FeaturedCard extends StatelessWidget {
                     style: AppTheme.body(size: 12, weight: FontWeight.w600, color: Colors.white)),
                 Text(item.category, maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: AppTheme.body(size: 10, color: const Color(0xFFB9BECF))),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Full-screen list combining sponsored ads and admin-approved businesses —
+/// the same data as the Home carousel, shown as a scrollable list.
+class FeaturedBusinessesScreen extends StatelessWidget {
+  const FeaturedBusinessesScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.cream,
+      appBar: AppBar(
+        backgroundColor: AppColors.cream,
+        elevation: 0,
+        foregroundColor: AppColors.charcoal,
+        title: Text('Featured Businesses', style: AppTheme.heading(size: 18)),
+      ),
+      body: StreamBuilder<List<_CarouselItem>>(
+        stream: _combinedFeaturedStream(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator(color: AppColors.navy));
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Could not load businesses.', style: AppTheme.body(color: AppColors.muted)));
+          }
+          final items = snapshot.data ?? [];
+          if (items.isEmpty) {
+            return Center(child: Text('No featured businesses yet.', style: AppTheme.body(color: AppColors.muted)));
+          }
+          return ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: items.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (context, i) => _FullListTile(item: items[i]),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _FullListTile extends StatelessWidget {
+  final _CarouselItem item;
+  const _FullListTile({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.cream2,
+        border: Border.all(color: AppColors.line),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: SizedBox(
+              width: 56,
+              height: 56,
+              child: item.imageUrl.isNotEmpty
+                  ? Image.network(
+                      item.imageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(color: AppColors.line, child: const Icon(Icons.storefront_outlined, color: AppColors.muted)),
+                    )
+                  : Container(color: AppColors.line, child: const Icon(Icons.storefront_outlined, color: AppColors.muted)),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Expanded(child: Text(item.name, style: AppTheme.body(size: 14, weight: FontWeight.w700))),
+                  if (item.isAdvert)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(color: AppColors.gold, borderRadius: BorderRadius.circular(6)),
+                      child: Text('Sponsored', style: AppTheme.body(size: 8, weight: FontWeight.w700, color: AppColors.navy)),
+                    ),
+                ]),
+                Text(item.category, style: AppTheme.body(size: 11.5, color: AppColors.muted)),
+                if (item.location.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Row(children: [
+                    const Icon(Icons.place_outlined, size: 13, color: AppColors.muted),
+                    const SizedBox(width: 3),
+                    Expanded(
+                      child: Text(item.location, style: AppTheme.body(size: 11.5, color: AppColors.muted), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
+                  ]),
+                ],
               ],
             ),
           ),
