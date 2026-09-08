@@ -10,6 +10,8 @@ import 'events_screen.dart';
 import 'prayer_screen.dart';
 import 'donate_screen.dart';
 import 'wallet_screen.dart';
+import 'directory_screen.dart';
+import 'me_screen.dart';
 
 /// Home dashboard.
 ///
@@ -127,7 +129,11 @@ class HomeScreen extends StatelessWidget {
                     Text('Quick Access', style: AppTheme.heading(size: 15)),
                     const SizedBox(height: 10),
                     Row(children: [
-                      _PrimaryCard(icon: Icons.apartment_outlined, label: 'Directory', onTap: () => _comingSoon(context)),
+                      _PrimaryCard(
+                        icon: Icons.apartment_outlined,
+                        label: 'Directory',
+                        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DirectoryScreen())),
+                      ),
                       const SizedBox(width: 10),
                       _PrimaryCard(icon: Icons.star_outline, label: 'Featured Business', onTap: () => _openFeatured(context)),
                       const SizedBox(width: 10),
@@ -631,6 +637,10 @@ class _BottomNav extends StatelessWidget {
                 Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CommunityChatScreen()));
               } else if (label == 'Prayer') {
                 Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PrayerScreen()));
+              } else if (label == 'Directory') {
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DirectoryScreen()));
+              } else if (label == 'Me') {
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MeScreen()));
               } else if (!active) {
                 HomeScreen._comingSoon(context);
               }
