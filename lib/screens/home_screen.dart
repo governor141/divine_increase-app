@@ -9,6 +9,7 @@ import 'community_chat_screen.dart';
 import 'events_screen.dart';
 import 'prayer_screen.dart';
 import 'donate_screen.dart';
+import 'wallet_screen.dart';
 
 /// Home dashboard.
 ///
@@ -52,6 +53,8 @@ class HomeScreen extends StatelessWidget {
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PrayerScreen()));
     } else if (label == 'Donate') {
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DonateScreen()));
+    } else if (label == 'Wallet') {
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WalletScreen()));
     } else {
       _comingSoon(context);
     }
