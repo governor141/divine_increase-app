@@ -85,7 +85,19 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
                   itemBuilder: (context, i) {
                     final m = messages[i];
                     final isMe = m.senderUid.isNotEmpty && m.senderUid == myUid;
-                    return _MessageBubble(message: m, isMe: isMe);
+                    // messages[] is newest-first. The item "above" this one
+                    // on screen (i+1) is the next-older message. Show a day
+                    // divider right above this message whenever its day
+                    // differs from the next-older one (or this is the very
+                    // oldest message loaded).
+                    final olderNeighbor = (i + 1 < messages.length) ? messages[i + 1].createdAt : null;
+                    final showDivider = m.createdAt != null && !_isSameDay(m.createdAt, olderNeighbor);
+                    return Column(
+                      children: [
+                        if (showDivider) _DayDivider(date: m.createdAt!),
+                        _MessageBubble(message: m, isMe: isMe),
+                      ],
+                    );
                   },
                 );
               },
@@ -143,6 +155,56 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
   }
 }
 
+bool _isSameDay(DateTime? a, DateTime? b) {
+  if (a == null || b == null) return false;
+  return a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
+/// WhatsApp-style label: "Today", "Yesterday", a weekday name for the last
+/// week, or a full date for anything older.
+String _dayLabel(DateTime date) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final day = DateTime(date.year, date.month, date.day);
+  final diff = today.difference(day).inDays;
+
+  if (diff == 0) return 'Today';
+  if (diff == 1) return 'Yesterday';
+
+  const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  if (diff > 1 && diff < 7) return weekdays[date.weekday - 1];
+
+  const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return '${months[date.month]} ${date.day}, ${date.year}';
+}
+
+/// 12-hour time like "9:41 AM" — matches WhatsApp's per-message time style.
+String _timeLabel(DateTime date) {
+  final hour12 = date.hour % 12 == 0 ? 12 : date.hour % 12;
+  final minute = date.minute.toString().padLeft(2, '0');
+  final period = date.hour < 12 ? 'AM' : 'PM';
+  return '$hour12:$minute $period';
+}
+
+class _DayDivider extends StatelessWidget {
+  final DateTime date;
+  const _DayDivider({required this.date});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          decoration: BoxDecoration(color: AppColors.cream2, border: Border.all(color: AppColors.line), borderRadius: BorderRadius.circular(20)),
+          child: Text(_dayLabel(date), style: AppTheme.body(size: 11, weight: FontWeight.w600, color: AppColors.muted)),
+        ),
+      ),
+    );
+  }
+}
+
 class _MessageBubble extends StatelessWidget {
   final ChatMessage message;
   final bool isMe;
@@ -175,6 +237,14 @@ class _MessageBubble extends StatelessWidget {
                 child: Text(message.senderName, style: AppTheme.body(size: 11, weight: FontWeight.w700, color: AppColors.sage)),
               ),
             Text(message.text, style: AppTheme.body(size: 13.5, color: isMe ? Colors.white : AppColors.charcoal)),
+            if (message.createdAt != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  _timeLabel(message.createdAt!),
+                  style: AppTheme.body(size: 10, color: isMe ? Colors.white70 : AppColors.muted),
+                ),
+              ),
           ],
         ),
       ),
