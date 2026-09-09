@@ -173,12 +173,16 @@ class _CarouselItem {
   final String location;
   final String imageUrl;
   final bool isAdvert;
+  final String description;
+  final String phone;
   const _CarouselItem({
     required this.name,
     required this.category,
     required this.location,
     required this.imageUrl,
     required this.isAdvert,
+    this.description = '',
+    this.phone = '',
   });
 }
 
@@ -199,7 +203,15 @@ Stream<List<_CarouselItem>> _combinedFeaturedStream() {
   final sub1 = adsQuery.snapshots().listen((snap) {
     ads = snap.docs
         .map(FeaturedBusiness.fromFirestore)
-        .map((f) => _CarouselItem(name: f.name, category: f.category, location: f.location, imageUrl: f.imageUrl, isAdvert: true))
+        .map((f) => _CarouselItem(
+              name: f.name,
+              category: f.category,
+              location: f.location,
+              imageUrl: f.imageUrl,
+              isAdvert: true,
+              description: f.description,
+              phone: f.phone,
+            ))
         .toList();
     gotAds = true;
     emit();
@@ -208,7 +220,15 @@ Stream<List<_CarouselItem>> _combinedFeaturedStream() {
   final sub2 = approvedQuery.snapshots().listen((snap) {
     approved = snap.docs
         .map(Business.fromFirestore)
-        .map((b) => _CarouselItem(name: b.businessName, category: b.businessCategory, location: b.location, imageUrl: b.displayImage, isAdvert: false))
+        .map((b) => _CarouselItem(
+              name: b.businessName,
+              category: b.businessCategory,
+              location: b.location,
+              imageUrl: b.displayImage,
+              isAdvert: false,
+              description: b.description,
+              phone: b.phone,
+            ))
         .toList();
     gotApproved = true;
     emit();
@@ -455,7 +475,9 @@ class _FullListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => FeaturedItemDetailScreen(item: item))),
+      child: Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: AppColors.cream2,
@@ -508,6 +530,74 @@ class _FullListTile extends StatelessWidget {
             ),
           ),
         ],
+      ),
+      ),
+    );
+  }
+}
+
+/// Detail view for a single item tapped from the Featured Businesses list
+/// (works for both sponsored ads and approved businesses, since they share
+/// the same _CarouselItem shape).
+class FeaturedItemDetailScreen extends StatelessWidget {
+  final _CarouselItem item;
+  const FeaturedItemDetailScreen({super.key, required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.cream,
+      appBar: AppBar(
+        backgroundColor: AppColors.cream,
+        elevation: 0,
+        foregroundColor: AppColors.charcoal,
+        title: Text(item.name, style: AppTheme.heading(size: 16)),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (item.imageUrl.isNotEmpty)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.network(item.imageUrl, height: 160, width: double.infinity, fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(height: 160, color: AppColors.line)),
+              ),
+            const SizedBox(height: 14),
+            Row(children: [
+              Expanded(child: Text(item.name, style: AppTheme.heading(size: 19))),
+              if (item.isAdvert)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(color: AppColors.gold, borderRadius: BorderRadius.circular(8)),
+                  child: Text('Sponsored', style: AppTheme.body(size: 10, weight: FontWeight.w700, color: AppColors.navy)),
+                ),
+            ]),
+            Text(item.category, style: AppTheme.body(size: 13, color: AppColors.muted)),
+            const SizedBox(height: 12),
+            if (item.description.isNotEmpty) Text(item.description, style: AppTheme.body(size: 13.5)),
+            const SizedBox(height: 16),
+            if (item.location.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 5),
+                child: Row(children: [
+                  const Icon(Icons.place_outlined, size: 16, color: AppColors.navy),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(item.location, style: AppTheme.body(size: 13.5))),
+                ]),
+              ),
+            if (item.phone.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 5),
+                child: Row(children: [
+                  const Icon(Icons.call_outlined, size: 16, color: AppColors.navy),
+                  const SizedBox(width: 8),
+                  Text(item.phone, style: AppTheme.body(size: 13.5)),
+                ]),
+              ),
+          ],
+        ),
       ),
     );
   }
