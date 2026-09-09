@@ -1,12 +1,10 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
-/// Wraps Firebase Authentication.
-///
-/// Phase 1 supports email/password only. Google Sign-In is intentionally
-/// left out for now — it needs your app's SHA-1 fingerprint registered in
-/// Firebase Console first (see README.md, "Phase 2: Google Sign-In").
+/// Wraps Firebase Authentication — email/password and Google Sign-In.
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   User? get currentUser => _auth.currentUser;
 
@@ -29,5 +27,23 @@ class AuthService {
     return cred;
   }
 
-  Future<void> signOut() => _auth.signOut();
+  /// Signs in with Google. Returns null if the user cancels the picker.
+  /// Relies on this app's signing certificate SHA-1 being registered in
+  /// Firebase Console (no google-services.json needed for this to work).
+  Future<UserCredential?> signInWithGoogle() async {
+    final googleUser = await _googleSignIn.signIn();
+    if (googleUser == null) return null;
+
+    final googleAuth = await googleUser.authentication;
+    final credential = GoogleAuthProvider.credential(
+      accessToken: googleAuth.accessToken,
+      idToken: googleAuth.idToken,
+    );
+    return _auth.signInWithCredential(credential);
+  }
+
+  Future<void> signOut() async {
+    await _googleSignIn.signOut();
+    await _auth.signOut();
+  }
 }
