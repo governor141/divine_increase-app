@@ -17,6 +17,14 @@ jobs:
         with:
           channel: 'stable'
 
+      - name: Install fixed debug keystore
+        # Using a fixed keystore (instead of a fresh random one each run)
+        # keeps the app's signing fingerprint stable across builds, which
+        # Google Sign-In depends on.
+        run: |
+          mkdir -p ~/.android
+          echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | base64 -d > ~/.android/debug.keystore
+
       - name: Inject Firebase config from secrets
         run: |
           sed -i "s/FIREBASE_API_KEY_PLACEHOLDER/${{ secrets.FIREBASE_API_KEY }}/" lib/firebase_options.dart
@@ -26,6 +34,10 @@ jobs:
           sed -i "s/FIREBASE_STORAGE_BUCKET_PLACEHOLDER/${{ secrets.FIREBASE_STORAGE_BUCKET }}/" lib/firebase_options.dart
 
       - name: Generate Android platform files
+        # This project intentionally does not commit an /android folder —
+        # it's generated fresh here every time, so it always matches
+        # whatever the current Flutter/Gradle template is. This line will
+        # NOT touch lib/ or pubspec.yaml, which already exist.
         run: flutter create --platforms=android --org com.spritussanctusignis .
 
       - name: Set app display name
