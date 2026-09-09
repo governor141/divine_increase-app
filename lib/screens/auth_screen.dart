@@ -59,6 +59,33 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
+  Future<void> _continueWithGoogle() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final cred = await _auth.signInWithGoogle();
+      if (cred == null) {
+        // User cancelled the Google account picker.
+        setState(() => _loading = false);
+        return;
+      }
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => PinScreen(mode: PinMode.unlock, email: cred.user?.email ?? ''),
+        ),
+      );
+    } on FirebaseAuthException catch (e) {
+      setState(() => _error = e.message ?? 'Google sign-in failed. Please try again.');
+    } catch (e) {
+      setState(() => _error = 'Google sign-in failed. Please try again.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -146,11 +173,7 @@ class _AuthScreenState extends State<AuthScreen> {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Google Sign-In is coming in the next update.')),
-                    );
-                  },
+                  onPressed: _loading ? null : _continueWithGoogle,
                   icon: const Icon(Icons.g_mobiledata, color: AppColors.charcoal),
                   label: Text('Continue with Google', style: AppTheme.body(size: 13, weight: FontWeight.w600)),
                   style: OutlinedButton.styleFrom(
