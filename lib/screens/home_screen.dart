@@ -14,6 +14,7 @@ import 'directory_screen.dart';
 import 'me_screen.dart';
 import 'advertise_screen.dart';
 import 'founder_screen.dart';
+import 'photo_viewer_screen.dart';
 
 /// Home dashboard.
 ///
@@ -373,7 +374,9 @@ class _FeaturedCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => FeaturedItemDetailScreen(item: item))),
+      child: Container(
       width: 148,
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.06),
@@ -433,6 +436,7 @@ class _FeaturedCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -568,10 +572,17 @@ class FeaturedItemDetailScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (item.imageUrl.isNotEmpty)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: Image.network(item.imageUrl, height: 160, width: double.infinity, fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(height: 160, color: AppColors.line)),
+              GestureDetector(
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => PhotoViewerScreen(imageUrls: [item.imageUrl], startingIndex: 0),
+                  ),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.network(item.imageUrl, height: 160, width: double.infinity, fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(height: 160, color: AppColors.line)),
+                ),
               ),
             const SizedBox(height: 14),
             Row(children: [

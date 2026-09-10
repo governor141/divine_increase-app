@@ -2,8 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../models/business.dart';
 import '../theme/app_theme.dart';
+import 'photo_viewer_screen.dart';
 
-/// Full business directory — every admin-approved business, searchable
+/// Full business directory -- every admin-approved business, searchable
 /// by name or category.
 class DirectoryScreen extends StatefulWidget {
   const DirectoryScreen({super.key});
@@ -117,15 +118,24 @@ class _BusinessTile extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: SizedBox(
-                width: 56,
-                height: 56,
-                child: business.displayImage.isNotEmpty
-                    ? Image.network(business.displayImage, fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(color: AppColors.line, child: const Icon(Icons.storefront_outlined, color: AppColors.muted)))
-                    : Container(color: AppColors.line, child: const Icon(Icons.storefront_outlined, color: AppColors.muted)),
+            GestureDetector(
+              onTap: business.displayImage.isNotEmpty
+                  ? () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => PhotoViewerScreen(imageUrls: [business.displayImage], startingIndex: 0),
+                        ),
+                      )
+                  : null,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: business.displayImage.isNotEmpty
+                      ? Image.network(business.displayImage, fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(color: AppColors.line, child: const Icon(Icons.storefront_outlined, color: AppColors.muted)))
+                      : Container(color: AppColors.line, child: const Icon(Icons.storefront_outlined, color: AppColors.muted)),
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -176,10 +186,17 @@ class BusinessDetailScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (business.displayImage.isNotEmpty)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: Image.network(business.displayImage, height: 160, width: double.infinity, fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(height: 160, color: AppColors.line)),
+              GestureDetector(
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => PhotoViewerScreen(imageUrls: [business.displayImage], startingIndex: 0),
+                  ),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.network(business.displayImage, height: 160, width: double.infinity, fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(height: 160, color: AppColors.line)),
+                ),
               ),
             const SizedBox(height: 14),
             Text(business.businessName, style: AppTheme.heading(size: 19)),

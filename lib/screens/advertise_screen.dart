@@ -6,16 +6,21 @@ import 'dart:io';
 import '../services/cloudinary_service.dart';
 import '../theme/app_theme.dart';
 
-/// Lets a user advertise their business, matching the website's
-/// "Advertise Your Business Here — Free for Now" flow: Business Name,
-/// Category, Location, Phone, Description, up to 3 photos. No payment step
-/// right now (requiresPayment hardcoded false — the free period is active
-/// as of this build). Submits to `advertRequests` with status
-/// "pending_confirmation" (required by the Firestore security rules).
+/// Lets a user advertise their business, matching the website's Advertise
+/// flow exactly. Reads `settings/advertConfig` (paidAdvertsActive) live, so
+/// this screen automatically switches between the free flow and the paid
+/// (N5,000/month, deducted from wallet balance) flow whenever the admin
+/// toggles it on the website -- no app update needed.
 ///
-/// IMPORTANT: if the free period ends, this screen needs payment fields
-/// added back (amount, proof-of-payment photo, bank transfer details) —
-/// ask the user for current status before assuming either way.
+/// When paidAdvertsActive is true: the user must have at least N5,000 in
+/// their wallet (`wallets/{uid}`). On submit, N5,000 is deducted from the
+/// wallet and the request is submitted with requiresPayment: true. If the
+/// balance is too low, submission is blocked with a message directing them
+/// to fund their wallet first (Wallet screen), matching the website.
+///
+/// Note: "Require Payment Proof" (a separate advertConfig field) governs
+/// the Wallet *funding* flow (bank transfer + screenshot, admin confirms),
+/// not this screen -- see lib/screens/wallet_screen.dart.
 class AdvertiseScreen extends StatefulWidget {
   const AdvertiseScreen({super.key});
 
@@ -24,6 +29,8 @@ class AdvertiseScreen extends StatefulWidget {
 }
 
 class _AdvertiseScreenState extends State<AdvertiseScreen> {
+  static const double _advertCost = 5000;
+
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _categoryController = TextEditingController();
@@ -62,10 +69,17 @@ class _AdvertiseScreenState extends State<AdvertiseScreen> {
     setState(() => _photos.removeAt(index));
   }
 
-  Future<void> _submit() async {
+  Future<void> _submit({required bool paidAdvertsActive, required double walletBalance}) async {
     if (!_formKey.currentState!.validate()) return;
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
+
+    if (paidAdvertsActive && walletBalance < _advertCost) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Your wallet balance is too low. Please fund your wallet first.')),
+      );
+      return;
+    }
 
     setState(() => _submitting = true);
     try {
@@ -77,7 +91,7 @@ class _AdvertiseScreenState extends State<AdvertiseScreen> {
         }
       }
 
-      await FirebaseFirestore.instance.collection('advertRequests').add({
+      final requestData = {
         'name': _nameController.text.trim(),
         'category': _categoryController.text.trim(),
         'location': _locationController.text.trim(),
@@ -87,10 +101,30 @@ class _AdvertiseScreenState extends State<AdvertiseScreen> {
         'images': imageUrls,
         'applicantUid': user.uid,
         'applicantEmail': user.email ?? '',
-        'requiresPayment': false,
+        'requiresPayment': paidAdvertsActive,
         'status': 'pending_confirmation',
         'submittedAt': FieldValue.serverTimestamp(),
-      });
+        if (paidAdvertsActive) 'amount': _advertCost,
+      };
+
+      if (paidAdvertsActive) {
+        final walletRef = FirebaseFirestore.instance.collection('wallets').doc(user.uid);
+        final requestRef = FirebaseFirestore.instance.collection('advertRequests').doc();
+        await FirebaseFirestore.instance.runTransaction((txn) async {
+          final walletSnap = await txn.get(walletRef);
+          final currentBalance = (walletSnap.data()?['balance'] as num?)?.toDouble() ?? 0;
+          if (currentBalance < _advertCost) {
+            throw Exception('Your wallet balance is too low. Please fund your wallet first.');
+          }
+          txn.update(walletRef, {
+            'balance': currentBalance - _advertCost,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+          txn.set(requestRef, requestData);
+        });
+      } else {
+        await FirebaseFirestore.instance.collection('advertRequests').add(requestData);
+      }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -100,7 +134,7 @@ class _AdvertiseScreenState extends State<AdvertiseScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not submit: ${e.toString()}')),
+        SnackBar(content: Text('Could not submit: ${e.toString().replaceFirst('Exception: ', '')}')),
       );
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -118,6 +152,8 @@ class _AdvertiseScreenState extends State<AdvertiseScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+
     return Scaffold(
       backgroundColor: AppColors.cream,
       appBar: AppBar(
@@ -127,114 +163,160 @@ class _AdvertiseScreenState extends State<AdvertiseScreen> {
         title: Text('Advertise Your Business', style: AppTheme.heading(size: 18)),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: AppColors.gold.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
-                  child: Text('Advertise your business here — Free for now.',
-                      style: AppTheme.body(size: 12.5, weight: FontWeight.w600)),
-                ),
-                const SizedBox(height: 18),
-                TextFormField(
-                  controller: _nameController,
-                  decoration: _decoration('Business Name'),
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter your business name' : null,
-                ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  controller: _categoryController,
-                  decoration: _decoration('Category'),
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter a category' : null,
-                ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  controller: _locationController,
-                  decoration: _decoration('Location'),
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter a location' : null,
-                ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  controller: _phoneController,
-                  decoration: _decoration('Phone'),
-                  keyboardType: TextInputType.phone,
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter a phone number' : null,
-                ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  controller: _descriptionController,
-                  decoration: _decoration('Description'),
-                  maxLines: 4,
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter a description' : null,
-                ),
-                const SizedBox(height: 18),
-                Text('Photos (up to 3)', style: AppTheme.body(size: 13, weight: FontWeight.w700)),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    for (int i = 0; i < _photos.length; i++)
-                      Stack(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.file(_photos[i], width: 88, height: 88, fit: BoxFit.cover),
-                          ),
-                          Positioned(
-                            top: 2,
-                            right: 2,
-                            child: GestureDetector(
-                              onTap: () => _removePhoto(i),
-                              child: Container(
-                                padding: const EdgeInsets.all(2),
-                                decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
-                                child: const Icon(Icons.close, size: 14, color: Colors.white),
-                              ),
+        child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance.collection('settings').doc('advertConfig').snapshots(),
+          builder: (context, configSnap) {
+            if (configSnap.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator(color: AppColors.navy));
+            }
+            final paidAdvertsActive = configSnap.data?.data()?['paidAdvertsActive'] == true;
+
+            return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+              stream: paidAdvertsActive && user != null
+                  ? FirebaseFirestore.instance.collection('wallets').doc(user.uid).snapshots()
+                  : const Stream.empty(),
+              builder: (context, walletSnap) {
+                final walletBalance = (walletSnap.data?.data()?['balance'] as num?)?.toDouble() ?? 0;
+
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (paidAdvertsActive)
+                          Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: AppColors.cream2,
+                              border: Border.all(color: AppColors.navy),
+                              borderRadius: BorderRadius.circular(12),
                             ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Step 1: Pay N5,000 from Your Wallet', style: AppTheme.body(size: 13, weight: FontWeight.w700)),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Your current wallet balance: N${walletBalance.toStringAsFixed(0)}. '
+                                  '${walletBalance < _advertCost ? 'Not enough? Fund your wallet first, then come back and submit.' : 'You have enough to submit below.'}',
+                                  style: AppTheme.body(size: 12, color: AppColors.muted),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(color: AppColors.gold.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+                            child: Text('Advertise your business here -- Free for now.',
+                                style: AppTheme.body(size: 12.5, weight: FontWeight.w600)),
                           ),
-                        ],
-                      ),
-                    if (_photos.length < 3)
-                      GestureDetector(
-                        onTap: _addPhoto,
-                        child: Container(
-                          width: 88,
-                          height: 88,
-                          decoration: BoxDecoration(
-                            color: AppColors.cream2,
-                            border: Border.all(color: AppColors.line),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(Icons.add_a_photo_outlined, color: AppColors.muted),
+                        const SizedBox(height: 18),
+                        Text(paidAdvertsActive ? 'Step 2: Submit Your Business Details' : 'Submit Your Business Details',
+                            style: AppTheme.body(size: 13, weight: FontWeight.w700)),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _nameController,
+                          decoration: _decoration('Business Name'),
+                          validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter your business name' : null,
                         ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 28),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _submitting ? null : _submit,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.navy,
-                      foregroundColor: AppColors.goldSoft,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        const SizedBox(height: 14),
+                        TextFormField(
+                          controller: _categoryController,
+                          decoration: _decoration('Category'),
+                          validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter a category' : null,
+                        ),
+                        const SizedBox(height: 14),
+                        TextFormField(
+                          controller: _locationController,
+                          decoration: _decoration('Location'),
+                          validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter a location' : null,
+                        ),
+                        const SizedBox(height: 14),
+                        TextFormField(
+                          controller: _phoneController,
+                          decoration: _decoration('Phone'),
+                          keyboardType: TextInputType.phone,
+                          validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter a phone number' : null,
+                        ),
+                        const SizedBox(height: 14),
+                        TextFormField(
+                          controller: _descriptionController,
+                          decoration: _decoration('Description'),
+                          maxLines: 4,
+                          validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter a description' : null,
+                        ),
+                        const SizedBox(height: 18),
+                        Text('Photos (up to 3)', style: AppTheme.body(size: 13, weight: FontWeight.w700)),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            for (int i = 0; i < _photos.length; i++)
+                              Stack(
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Image.file(_photos[i], width: 88, height: 88, fit: BoxFit.cover),
+                                  ),
+                                  Positioned(
+                                    top: 2,
+                                    right: 2,
+                                    child: GestureDetector(
+                                      onTap: () => _removePhoto(i),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(2),
+                                        decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                                        child: const Icon(Icons.close, size: 14, color: Colors.white),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            if (_photos.length < 3)
+                              GestureDetector(
+                                onTap: _addPhoto,
+                                child: Container(
+                                  width: 88,
+                                  height: 88,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.cream2,
+                                    border: Border.all(color: AppColors.line),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(Icons.add_a_photo_outlined, color: AppColors.muted),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 28),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _submitting
+                                ? null
+                                : () => _submit(paidAdvertsActive: paidAdvertsActive, walletBalance: walletBalance),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.navy,
+                              foregroundColor: AppColors.goldSoft,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: _submitting
+                                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.goldSoft))
+                                : Text(paidAdvertsActive ? 'Submit for Confirmation' : 'Submit'),
+                          ),
+                        ),
+                      ],
                     ),
-                    child: _submitting
-                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.goldSoft))
-                        : const Text('Submit'),
                   ),
-                ),
-              ],
-            ),
-          ),
+                );
+              },
+            );
+          },
         ),
       ),
     );

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import 'photo_viewer_screen.dart';
 
 /// Static "About the Founder" page. This content does not come from
 /// Firestore — it is hardcoded to match the website's founder.html exactly,
@@ -29,14 +30,20 @@ class FounderScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
+            GestureDetector(
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const PhotoViewerScreen(imageUrls: [_photoUrl], startingIndex: 0),
+                  ),
+                );
+              },
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(20),
                 child: Image.network(
                   _photoUrl,
-                  height: 260,
                   width: double.infinity,
-                  fit: BoxFit.cover,
+                  fit: BoxFit.fitWidth,
                   errorBuilder: (_, __, ___) => Container(
                     height: 260,
                     color: AppColors.cream2,
