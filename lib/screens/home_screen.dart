@@ -12,6 +12,8 @@ import 'donate_screen.dart';
 import 'wallet_screen.dart';
 import 'directory_screen.dart';
 import 'me_screen.dart';
+import 'advertise_screen.dart';
+import 'founder_screen.dart';
 
 /// Home dashboard.
 ///
@@ -32,6 +34,7 @@ class HomeScreen extends StatelessWidget {
     _NetworkItem('Community', Icons.groups_outlined, AppColors.sage),
     _NetworkItem('Wallet', Icons.account_balance_wallet_outlined, AppColors.navy),
     _NetworkItem('Donate', Icons.favorite_outline, AppColors.danger),
+    _NetworkItem('Founder', Icons.auto_stories_outlined, AppColors.gold),
   ];
 
   static void _comingSoon(BuildContext context) {
@@ -57,6 +60,8 @@ class HomeScreen extends StatelessWidget {
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DonateScreen()));
     } else if (label == 'Wallet') {
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WalletScreen()));
+    } else if (label == 'Founder') {
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FounderScreen()));
     } else {
       _comingSoon(context);
     }
@@ -137,7 +142,11 @@ class HomeScreen extends StatelessWidget {
                       const SizedBox(width: 10),
                       _PrimaryCard(icon: Icons.star_outline, label: 'Featured Business', onTap: () => _openFeatured(context)),
                       const SizedBox(width: 10),
-                      _PrimaryCard(icon: Icons.campaign_outlined, label: 'Advertise', onTap: () => _comingSoon(context)),
+                      _PrimaryCard(
+                        icon: Icons.campaign_outlined,
+                        label: 'Advertise',
+                        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdvertiseScreen())),
+                      ),
                     ]),
                     const SizedBox(height: 18),
                     Text('Network', style: AppTheme.heading(size: 15)),
