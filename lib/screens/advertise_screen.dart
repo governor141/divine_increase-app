@@ -72,7 +72,9 @@ class _AdvertiseScreenState extends State<AdvertiseScreen> {
       final imageUrls = <String>[];
       for (final photo in _photos) {
         final url = await CloudinaryService.uploadImage(photo);
-        imageUrls.add(url);
+        if (url != null && url.isNotEmpty) {
+          imageUrls.add(url);
+        }
       }
 
       await FirebaseFirestore.instance.collection('advertRequests').add({
