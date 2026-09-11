@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import '../models/testimony.dart';
 import '../theme/app_theme.dart';
 
@@ -96,8 +98,15 @@ class _TestimonyCard extends StatelessWidget {
 }
 
 /// Lets a signed-in user submit their own testimony. It's saved with
-/// status "pending" and won't appear publicly until an admin approves it —
+/// status "pending" and won't appear publicly until an admin approves it --
 /// same review pattern as business listings.
+///
+/// After saving to Firestore, this also notifies the ministry's Telegram
+/// via a Cloudflare Worker (same pattern as prayer requests), matching the
+/// website's testimonies.html exactly. This is best-effort -- if the
+/// Telegram notification fails, the testimony is still saved and can be
+/// approved from the website dashboard's Pending Testimonies list, same as
+/// the website's own behavior.
 class SubmitTestimonyScreen extends StatefulWidget {
   const SubmitTestimonyScreen({super.key});
 
@@ -106,6 +115,8 @@ class SubmitTestimonyScreen extends StatefulWidget {
 }
 
 class _SubmitTestimonyScreenState extends State<SubmitTestimonyScreen> {
+  static const _telegramWorkerUrl = 'https://divine-increase-testimony.governoreze24.workers.dev/';
+
   final _titleCtrl = TextEditingController();
   final _categoryCtrl = TextEditingController();
   final _bodyCtrl = TextEditingController();
@@ -120,6 +131,35 @@ class _SubmitTestimonyScreenState extends State<SubmitTestimonyScreen> {
     super.dispose();
   }
 
+  Future<void> _notifyTelegram({
+    required String docId,
+    required String title,
+    required String category,
+    required String testimony,
+    required String authorName,
+    required String authorEmail,
+  }) async {
+    try {
+      await http.post(
+        Uri.parse(_telegramWorkerUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'docId': docId,
+          'title': title,
+          'category': category,
+          'testimony': testimony,
+          'authorName': authorName,
+          'authorEmail': authorEmail,
+        }),
+      );
+    } catch (e) {
+      // Best-effort, same as the website: Firestore save already succeeded,
+      // so we don't surface this to the user or block anything.
+      // ignore: avoid_print
+      print('Telegram testimony notification failed (Firestore save still succeeded): $e');
+    }
+  }
+
   Future<void> _submit() async {
     if (_titleCtrl.text.trim().isEmpty || _bodyCtrl.text.trim().isEmpty) {
       setState(() => _error = 'Please fill in at least a title and your testimony.');
@@ -131,16 +171,34 @@ class _SubmitTestimonyScreenState extends State<SubmitTestimonyScreen> {
     });
     try {
       final user = FirebaseAuth.instance.currentUser;
-      await FirebaseFirestore.instance.collection('testimonies').add({
+      final authorName = (user?.displayName?.isNotEmpty == true) ? user!.displayName! : (user?.email?.split('@').first ?? 'Anonymous');
+      final authorEmail = user?.email ?? '';
+      final title = _titleCtrl.text.trim();
+      final category = _categoryCtrl.text.trim();
+      final body = _bodyCtrl.text.trim();
+
+      final docRef = await FirebaseFirestore.instance.collection('testimonies').add({
         'authorUid': user?.uid ?? '',
-        'authorName': user?.displayName ?? 'Anonymous',
-        'authorEmail': user?.email ?? '',
-        'category': _categoryCtrl.text.trim(),
-        'title': _titleCtrl.text.trim(),
-        'testimony': _bodyCtrl.text.trim(),
+        'authorName': authorName,
+        'authorEmail': authorEmail,
+        'category': category,
+        'title': title,
+        'testimony': body,
         'status': 'pending',
         'createdAt': FieldValue.serverTimestamp(),
       });
+
+      // Fire-and-forget, same as the website -- don't block the success
+      // message or the pop on this.
+      _notifyTelegram(
+        docId: docRef.id,
+        title: title,
+        category: category,
+        testimony: body,
+        authorName: authorName,
+        authorEmail: authorEmail,
+      );
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Thank you! Your testimony has been submitted for review.')),
