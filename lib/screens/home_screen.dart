@@ -105,8 +105,6 @@ class HomeScreen extends StatelessWidget {
                         ]),
                         Row(children: [
                           _NotificationBell(),
-                          const SizedBox(width: 8),
-                          _IconBtn(icon: Icons.menu, onTap: () {}),
                         ]),
                       ],
                     ),

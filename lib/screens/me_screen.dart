@@ -9,9 +9,10 @@ import 'auth_screen.dart';
 import 'pin_screen.dart';
 
 /// The signed-in user's own space: their business profile (if they have
-/// one) and account actions (change PIN, sign out).
+/// one), the ministry's contact details, and account actions (change PIN,
+/// sign out).
 ///
-/// Editing business profile details isn't built yet — it needs photo
+/// Editing business profile details isn't built yet -- it needs photo
 /// upload support (Cloudinary), which is deliberately deferred until that's
 /// configured safely. For now this shows the profile clearly and marks
 /// editing as coming soon.
@@ -134,6 +135,27 @@ class MeScreen extends StatelessWidget {
               },
             ),
           const SizedBox(height: 24),
+          Text('Ministry Contact', style: AppTheme.heading(size: 15)),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(color: AppColors.cream2, border: Border.all(color: AppColors.line), borderRadius: BorderRadius.circular(14)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                _ContactRow(icon: Icons.church_outlined, label: 'Spiritus Sanctus Ignis Ministry'),
+                SizedBox(height: 10),
+                _ContactRow(icon: Icons.place_outlined, label: '20 Uchemec Street Igboelerin, Ojo, Lagos'),
+                SizedBox(height: 10),
+                _ContactRow(icon: Icons.mail_outline, label: 'spiritussanctusignisministry@gmail.com'),
+                SizedBox(height: 10),
+                _ContactRow(icon: Icons.call_outlined, label: '09123597543'),
+                SizedBox(height: 6),
+                _ContactRow(icon: Icons.call_outlined, label: '09160803602'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
           Text('Account', style: AppTheme.heading(size: 15)),
           const SizedBox(height: 10),
           _ActionTile(icon: Icons.lock_reset, label: 'Change PIN', onTap: () => _changePin(context, email)),
@@ -141,6 +163,24 @@ class MeScreen extends StatelessWidget {
           _ActionTile(icon: Icons.logout, label: 'Sign Out', color: AppColors.danger, onTap: () => _signOut(context)),
         ],
       ),
+    );
+  }
+}
+
+class _ContactRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  const _ContactRow({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: AppColors.navy),
+        const SizedBox(width: 8),
+        Expanded(child: Text(label, style: AppTheme.body(size: 13))),
+      ],
     );
   }
 }
