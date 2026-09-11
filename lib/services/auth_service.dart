@@ -1,10 +1,19 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
-/// Wraps Firebase Authentication — email/password and Google Sign-In.
+/// Wraps Firebase Authentication -- email/password and Google Sign-In.
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+
+  // serverClientId is the WEB OAuth client (from Google Cloud Console,
+  // auto-created by Firebase alongside the Android client), NOT the Android
+  // client ID. Firebase needs this to actually verify the Google sign-in --
+  // without it, the account picker shows fine but sign-in fails right after
+  // an account is chosen, for every account. This is separate from the
+  // Android app's registered SHA-1 fingerprint (both are required).
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    serverClientId: '978041285468-8g13nvbtieuiqbfc63pgobujnju3a699.apps.googleusercontent.com',
+  );
 
   User? get currentUser => _auth.currentUser;
 
@@ -28,8 +37,6 @@ class AuthService {
   }
 
   /// Signs in with Google. Returns null if the user cancels the picker.
-  /// Relies on this app's signing certificate SHA-1 being registered in
-  /// Firebase Console (no google-services.json needed for this to work).
   Future<UserCredential?> signInWithGoogle() async {
     final googleUser = await _googleSignIn.signIn();
     if (googleUser == null) return null;
