@@ -15,6 +15,8 @@ import 'me_screen.dart';
 import 'advertise_screen.dart';
 import 'founder_screen.dart';
 import 'photo_viewer_screen.dart';
+import 'notifications_screen.dart';
+import '../services/notification_read_service.dart';
 
 /// Home dashboard.
 ///
@@ -102,7 +104,7 @@ class HomeScreen extends StatelessWidget {
                           ]),
                         ]),
                         Row(children: [
-                          _IconBtn(icon: Icons.notifications_outlined, showDot: true, onTap: () {}),
+                          _NotificationBell(),
                           const SizedBox(width: 8),
                           _IconBtn(icon: Icons.menu, onTap: () {}),
                         ]),
@@ -619,6 +621,52 @@ class FeaturedItemDetailScreen extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _NotificationBell extends StatefulWidget {
+  @override
+  State<_NotificationBell> createState() => _NotificationBellState();
+}
+
+class _NotificationBellState extends State<_NotificationBell> {
+  Set<String> _readIds = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadReadIds();
+  }
+
+  Future<void> _loadReadIds() async {
+    final ids = await NotificationReadService.getReadIds();
+    if (mounted) setState(() => _readIds = ids);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance.collection('notifications').snapshots(),
+      builder: (context, snapshot) {
+        final now = DateTime.now();
+        final docs = snapshot.data?.docs ?? [];
+        final hasUnread = docs.any((doc) {
+          final data = doc.data();
+          final expireAt = (data['expireAt'] as Timestamp?)?.toDate();
+          final active = expireAt == null || expireAt.isAfter(now);
+          return active && !_readIds.contains(doc.id);
+        });
+
+        return _IconBtn(
+          icon: Icons.notifications_outlined,
+          showDot: hasUnread,
+          onTap: () async {
+            await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NotificationsScreen()));
+            _loadReadIds();
+          },
+        );
+      },
     );
   }
 }
