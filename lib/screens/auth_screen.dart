@@ -78,9 +78,13 @@ class _AuthScreenState extends State<AuthScreen> {
         ),
       );
     } on FirebaseAuthException catch (e) {
-      setState(() => _error = e.message ?? 'Google sign-in failed. Please try again.');
+      // TEMPORARY DEBUG: showing the real error so we can diagnose Google
+      // Sign-In. Revert to the friendly generic message once this is fixed.
+      setState(() => _error = 'FirebaseAuthException: ${e.code} -- ${e.message}');
     } catch (e) {
-      setState(() => _error = 'Google sign-in failed. Please try again.');
+      // TEMPORARY DEBUG: showing the real error so we can diagnose Google
+      // Sign-In. Revert to the friendly generic message once this is fixed.
+      setState(() => _error = 'RAW ERROR: ${e.toString()}');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -140,7 +144,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 label: 'Password',
                 icon: Icons.lock_outline,
                 controller: _passwordCtrl,
-                hint: '••••••••',
+                hint: '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022',
                 obscure: true,
               ),
               if (_error != null) ...[
